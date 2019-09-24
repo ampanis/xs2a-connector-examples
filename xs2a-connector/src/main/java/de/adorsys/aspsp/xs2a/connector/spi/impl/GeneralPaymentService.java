@@ -204,7 +204,7 @@ public class GeneralPaymentService {
         Function<Object, TO> convertToTransferObject = o -> objectMapper.convertValue(o, clazz);
 
         if (!TransactionStatus.ACSP.equals(payment.getPaymentStatus())) {
-            buildSuccessResponse.apply(payment);
+            return buildSuccessResponse.apply(payment);
         }
 
         return getPaymentFromLedgers(payment.getPaymentId(), payment.toString(), aspspConsentDataProvider.loadAspspConsentData(), paymentTypeTO)
