@@ -19,6 +19,8 @@ package de.adorsys.aspsp.xs2a.connector.spi.impl;
 import de.adorsys.aspsp.xs2a.connector.mock.IbanResolverMockService;
 import de.adorsys.aspsp.xs2a.connector.spi.converter.LedgersSpiAccountMapper;
 import de.adorsys.ledgers.middleware.api.domain.account.AccountDetailsTO;
+import de.adorsys.ledgers.middleware.api.domain.account.AccountIdentifierTypeTO;
+import de.adorsys.ledgers.middleware.api.domain.account.AdditionalAccountInformationTO;
 import de.adorsys.ledgers.middleware.api.domain.sca.SCAResponseTO;
 import de.adorsys.ledgers.rest.client.AccountRestClient;
 import de.adorsys.ledgers.rest.client.AuthRequestInterceptor;
@@ -38,6 +40,7 @@ import de.adorsys.psd2.xs2a.spi.domain.consent.SpiAccountAccess;
 import de.adorsys.psd2.xs2a.spi.domain.response.SpiResponse;
 import de.adorsys.psd2.xs2a.spi.service.AccountSpi;
 import feign.FeignException;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
@@ -47,6 +50,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
@@ -58,17 +62,12 @@ import java.time.Month;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Component
 @PropertySource("classpath:mock-data.properties")
 public class AccountSpiImpl implements AccountSpi {
-
-    private static final String RESPONSE_STATUS_200_WITH_EMPTY_BODY = "Response status was 200, but the body was empty!";
-    private static final String ADDITIONAL_INFORMATION_MOCK = "additional information";
-    @Value("${test-download-transaction-list}")
-    private String transactionList;
-
     private static final Logger logger = LoggerFactory.getLogger(AccountSpiImpl.class);
-
+    private static final String RESPONSE_STATUS_200_WITH_EMPTY_BODY = "Response status was 200, but the body was empty!";
     private static final String DEFAULT_ACCEPT_MEDIA_TYPE = MediaType.APPLICATION_JSON_VALUE;
     private static final String WILDCARD_ACCEPT_HEADER = "*/*";
 
@@ -78,6 +77,9 @@ public class AccountSpiImpl implements AccountSpi {
     private final AspspConsentDataService tokenService;
     private final FeignExceptionReader feignExceptionReader;
     private final IbanResolverMockService ibanResolverMockService;
+
+    @Value("${test-download-transaction-list}")
+    private String transactionList;
 
     public AccountSpiImpl(AccountRestClient restClient, LedgersSpiAccountMapper accountMapper,
                           AuthRequestInterceptor authRequestInterceptor, AspspConsentDataService tokenService, FeignExceptionReader feignExceptionReader, IbanResolverMockService ibanResolverMockService) {
@@ -101,7 +103,7 @@ public class AccountSpiImpl implements AccountSpi {
 
             logger.info("Requested account list for consent with ID: {} and withBalance: {}", accountConsent.getId(),
                         withBalance);
-            List<SpiAccountDetails> accountDetailsList = getSpiAccountDetails(withBalance, accountConsent, aspspConsentData);
+            List<SpiAccountDetails> accountDetailsList = getSpiAccountDetails(withBalance, accountConsent);
 
             aspspConsentDataProvider.updateAspspConsentData(tokenService.store(response));
 
@@ -333,15 +335,14 @@ public class AccountSpiImpl implements AccountSpi {
         }
     }
 
-    private List<SpiAccountDetails> getSpiAccountDetails(boolean withBalance, @NotNull SpiAccountConsent accountConsent,
-                                                         byte[] aspspConsentData) {
+    private List<SpiAccountDetails> getSpiAccountDetails(boolean withBalance, @NotNull SpiAccountConsent accountConsent) {
         List<SpiAccountDetails> accountDetailsList;
         if (isGlobalConsent(accountConsent.getAccess()) || isAllAvailableAccountsConsent(accountConsent)) {
             logger.info("Consent with ID: {} is a global or available account Consent", accountConsent.getId());
-            accountDetailsList = getAccountDetailsByConsentId(aspspConsentData);
+            accountDetailsList = getAccountDetailsByConsentId();
         } else {
             logger.info("Consent with ID: {} is a regular consent", accountConsent.getId());
-            accountDetailsList = getAccountDetailsFromReferences(withBalance, accountConsent, aspspConsentData);
+            accountDetailsList = getAccountDetailsFromReferences(withBalance, accountConsent);
         }
         return accountDetailsList;
     }
@@ -372,57 +373,38 @@ public class AccountSpiImpl implements AccountSpi {
         return accountConsent.getAisConsentRequestType() == AisConsentRequestType.ALL_AVAILABLE_ACCOUNTS;
     }
 
-    private List<SpiAccountDetails> getAccountDetailsByConsentId(byte[] aspspConsentData) {
-        try {
-            applyAuthorisation(aspspConsentData);
-
-            return Optional.ofNullable(accountRestClient.getListOfAccounts().getBody())
-                           .map(l -> l.stream().map(accountMapper::toSpiAccountDetails)
-                                             .collect(Collectors.toList()))
-                           .orElseGet(Collections::emptyList);
-        } finally {
-            authRequestInterceptor.setAccessToken(null);
-        }
+    private List<SpiAccountDetails> getAccountDetailsByConsentId() {
+        return Optional.ofNullable(accountRestClient.getListOfAccounts().getBody())
+                       .map(l -> l.stream().map(accountMapper::toSpiAccountDetails)
+                                         .collect(Collectors.toList()))
+                       .orElseGet(Collections::emptyList);
     }
 
     private List<SpiAccountDetails> getAccountDetailsFromReferences(boolean withBalance,
-                                                                    SpiAccountConsent accountConsent,
-                                                                    byte[] aspspConsentData) {
-        // TODO remove consentId param, when
-        // SpiAccountConsent contains it
-        // https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/430
+                                                                    SpiAccountConsent accountConsent) {
         SpiAccountAccess accountAccess = accountConsent.getAccess();
         List<SpiAccountReference> references = withBalance ? accountAccess.getBalances() : accountAccess.getAccounts();
 
-        return getAccountDetailsFromReferences(references, aspspConsentData);
+        return getAccountDetailsFromReferences(references);
     }
 
-    private List<SpiAccountDetails> getAccountDetailsFromReferences(List<SpiAccountReference> references,
-                                                                    byte[] aspspConsentData) {
+    private List<SpiAccountDetails> getAccountDetailsFromReferences(List<SpiAccountReference> references) {
+        List<AccountDetailsTO> accountDetails = accountRestClient.getListOfAccounts().getBody();
 
-        try {
-            applyAuthorisation(aspspConsentData);
-
-            List<AccountDetailsTO> accountDetails = accountRestClient.getListOfAccounts().getBody();
-
-            if (accountDetails == null) {
-                return Collections.emptyList();
-            }
-
-            return accountDetails.stream()
-                           .filter(account -> filterAccountDetailsByIbanAndCurrency(references, account.getIban(), account.getCurrency()))
-                           .map(accountMapper::toSpiAccountDetails)
-                           .collect(Collectors.toList());
-
-        } finally {
-            authRequestInterceptor.setAccessToken(null);
+        if (accountDetails == null) {
+            return Collections.emptyList();
         }
+
+        return accountDetails.stream()
+                       .filter(account -> containsAccountReferenceWithIban(references, account.getIban(), account.getCurrency()))
+                       .map(accountMapper::toSpiAccountDetails)
+                       .collect(Collectors.toList());
     }
 
-    private boolean filterAccountDetailsByIbanAndCurrency(List<SpiAccountReference> references, String iban, Currency currency) {
+    private boolean containsAccountReferenceWithIban(List<SpiAccountReference> references, String iban, Currency currency) {
         return references.stream()
                        .filter(reference -> Optional.ofNullable(reference.getIban())
-                                                    .orElseGet(() -> ibanResolverMockService.handleIbanByAccountReference(reference)) // TODO: Currently mocked data is used here. https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1152
+                                                    .orElseGet(() -> ibanResolverMockService.handleIbanByAccountReference(reference)) // TODO: Remove when ledgers starts supporting card accounts https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1246
                                                     .equals(iban))
 
                        .anyMatch(reference -> reference.getCurrency() == null || reference.getCurrency().equals(currency));
@@ -483,19 +465,23 @@ public class AccountSpiImpl implements AccountSpi {
     }
 
     private void enrichSpiAccountDetailsWithOwnerName(SpiAccountDetails accountDetails, SpiAccountAccess access) {
-        SpiAdditionalInformationAccess spiAdditionalInformationAccess = access.getSpiAdditionalInformationAccess();
-        if (spiAdditionalInformationAccess != null && spiAdditionalInformationAccess.getOwnerName() != null) {
-            List<SpiAccountReference> ownerName = spiAdditionalInformationAccess.getOwnerName();
-            if (ownerName.isEmpty() || filterAccountDetailsByIbanAndCurrency(ownerName, accountDetails.getIban(), accountDetails.getCurrency())) {
-                accountDetails.setOwnerName(ADDITIONAL_INFORMATION_MOCK);
-            }
-        } else {
-            AccountAccessType allAccountsWithOwnerName = AccountAccessType.ALL_ACCOUNTS_WITH_OWNER_NAME;
-            List<AccountAccessType> accountAccessTypes = Arrays.asList(access.getAvailableAccounts(), access.getAvailableAccountsWithBalance(), access.getAllPsd2());
-            if (accountAccessTypes.contains(allAccountsWithOwnerName)) {
-                accountDetails.setOwnerName(ADDITIONAL_INFORMATION_MOCK);
-            }
+        if (isOwnerNameAllowed(accountDetails, access)) {
+            String accountOwnerNameFromLedgers = getAccountOwnerNameFromLedgers(accountDetails);
+            accountDetails.setOwnerName(accountOwnerNameFromLedgers);
         }
+    }
+
+    private String getAccountOwnerNameFromLedgers(SpiAccountDetails accountDetails) {
+        ResponseEntity<List<AdditionalAccountInformationTO>> additionalAccountInfo = accountRestClient.getAdditionalAccountInfo(AccountIdentifierTypeTO.ACCOUNT_ID, accountDetails.getResourceId());
+
+        List<AdditionalAccountInformationTO> additionalAccountInformationList = additionalAccountInfo.getBody();
+        if (CollectionUtils.isEmpty(additionalAccountInformationList)) {
+            return null;
+        }
+
+        return additionalAccountInformationList.stream()
+                       .map(AdditionalAccountInformationTO::getAccountOwnerName)
+                       .collect(Collectors.joining(", "));
     }
 
     private SpiAccountBalance buildSpiAccountBalance() {
@@ -506,6 +492,18 @@ public class AccountSpiImpl implements AccountSpi {
         accountBalance.setReferenceDate(LocalDate.of(2020, Month.JANUARY, 1));
         accountBalance.setLastChangeDateTime(LocalDateTime.of(2019, Month.FEBRUARY, 15, 10, 0, 0, 0));
         return accountBalance;
+    }
+
+    private boolean isOwnerNameAllowed(SpiAccountDetails accountDetails, SpiAccountAccess accountAccess) {
+        SpiAdditionalInformationAccess spiAdditionalInformationAccess = accountAccess.getSpiAdditionalInformationAccess();
+        if (spiAdditionalInformationAccess != null && spiAdditionalInformationAccess.getOwnerName() != null) {
+            List<SpiAccountReference> ownerName = spiAdditionalInformationAccess.getOwnerName();
+            return ownerName.isEmpty() || containsAccountReferenceWithIban(ownerName, accountDetails.getIban(), accountDetails.getCurrency());
+        }
+
+        AccountAccessType allAccountsWithOwnerName = AccountAccessType.ALL_ACCOUNTS_WITH_OWNER_NAME;
+        List<AccountAccessType> accountAccessTypes = Arrays.asList(accountAccess.getAvailableAccounts(), accountAccess.getAvailableAccountsWithBalance(), accountAccess.getAllPsd2());
+        return accountAccessTypes.contains(allAccountsWithOwnerName);
     }
 
 }

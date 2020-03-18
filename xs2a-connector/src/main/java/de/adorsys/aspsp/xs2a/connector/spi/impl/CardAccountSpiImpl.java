@@ -60,6 +60,7 @@ public class CardAccountSpiImpl implements CardAccountSpi {
     private static final String DEFAULT_ACCEPT_MEDIA_TYPE = MediaType.APPLICATION_JSON_VALUE;
     private static final String WILDCARD_ACCEPT_HEADER = "*/*";
     private static final String ADDITIONAL_INFORMATION_MOCK = "additional information";
+    private static final String CARD_TRANSACTION_ACCEPTOR = "Müller";
 
     private final AccountRestClient accountRestClient;
     private final LedgersSpiAccountMapper accountMapper;
@@ -127,7 +128,7 @@ public class CardAccountSpiImpl implements CardAccountSpi {
                                                                .map(accountMapper::toSpiCardAccountDetails)
                                                                .orElseThrow(() -> FeignExceptionHandler.getException(HttpStatus.NOT_FOUND, RESPONSE_STATUS_200_WITH_EMPTY_BODY));
 
-            cardAccountDetails.setMaskedPan(ibanResolverMockService.getMaskedPanByIban(cardAccountDetails.getAspspAccountId())); // Currently mocked data is used here. https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1152
+            cardAccountDetails.setMaskedPan(ibanResolverMockService.getMaskedPanByIban(cardAccountDetails.getAspspAccountId())); // TODO: Remove when ledgers starts supporting card accounts https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1246
 
             aspspConsentDataProvider.updateAspspConsentData(tokenService.store(response));
             enrichSpiCardAccountDetailsWithOwnerName(cardAccountDetails, accountConsent.getAccess());
@@ -331,7 +332,7 @@ public class CardAccountSpiImpl implements CardAccountSpi {
     private boolean filterAccountDetailsByIbanAndCurrency(List<SpiAccountReference> references, AccountDetailsTO account) {
         return references.stream()
                        .filter(reference -> Optional.ofNullable(reference.getIban())
-                                                    .orElseGet(() -> ibanResolverMockService.handleIbanByAccountReference(reference)) // Currently mocked data is used here. https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1152
+                                                    .orElseGet(() -> ibanResolverMockService.handleIbanByAccountReference(reference)) // TODO: Remove when ledgers starts supporting card accounts https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1246
                                                     .equals(account.getIban()))
 
                        .anyMatch(reference -> reference.getCurrency() == null || reference.getCurrency().equals(account.getCurrency()));
@@ -366,12 +367,12 @@ public class CardAccountSpiImpl implements CardAccountSpi {
                                       new SpiAmount(Currency.getInstance("EUR"), new BigDecimal(200)),
                                       new SpiAmount(Currency.getInstance("EUR"), new BigDecimal(200)),
                                       "2",
-                                      "Müller",
+                                      CARD_TRANSACTION_ACCEPTOR,
                                       null,
                                       null,
-                                      "Müller",
-                                      "Müller",
-                                      "Müller",
+                                      CARD_TRANSACTION_ACCEPTOR,
+                                      CARD_TRANSACTION_ACCEPTOR,
+                                      CARD_TRANSACTION_ACCEPTOR,
                                       true,
                                       "");
     }
@@ -387,7 +388,7 @@ public class CardAccountSpiImpl implements CardAccountSpi {
     }
 
     private List<SpiCardAccountDetails> mapToCardAccountList(List<SpiCardAccountDetails> details) {
-        details.forEach(det -> det.setMaskedPan(ibanResolverMockService.getMaskedPanByIban(det.getAspspAccountId()))); // Currently mocked data is used here. https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1152
+        details.forEach(det -> det.setMaskedPan(ibanResolverMockService.getMaskedPanByIban(det.getAspspAccountId()))); // TODO: Remove when ledgers starts supporting card accounts https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1246
         return details;
     }
 
