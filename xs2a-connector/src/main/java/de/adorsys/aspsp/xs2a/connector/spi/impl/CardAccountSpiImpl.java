@@ -315,24 +315,18 @@ public class CardAccountSpiImpl implements CardAccountSpi {
 
     private List<SpiCardAccountDetails> getAccountDetailsFromReferences(List<SpiAccountReference> references,
                                                                         byte[] aspspConsentData) {
+        applyAuthorisation(aspspConsentData);
 
-        try {
-            applyAuthorisation(aspspConsentData);
+        List<AccountDetailsTO> accountDetails = accountRestClient.getListOfAccounts().getBody();
 
-            List<AccountDetailsTO> accountDetails = accountRestClient.getListOfAccounts().getBody();
-
-            if (accountDetails == null) {
-                return Collections.emptyList();
-            }
-
-            return accountDetails.stream()
-                           .filter(account -> filterAccountDetailsByIbanAndCurrency(references, account))
-                           .map(accountMapper::toSpiCardAccountDetails)
-                           .collect(Collectors.toList());
-
-        } finally {
-            authRequestInterceptor.setAccessToken(null);
+        if (accountDetails == null) {
+            return Collections.emptyList();
         }
+
+        return accountDetails.stream()
+                       .filter(account -> filterAccountDetailsByIbanAndCurrency(references, account))
+                       .map(accountMapper::toSpiCardAccountDetails)
+                       .collect(Collectors.toList());
     }
 
     private boolean filterAccountDetailsByIbanAndCurrency(List<SpiAccountReference> references, AccountDetailsTO account) {
