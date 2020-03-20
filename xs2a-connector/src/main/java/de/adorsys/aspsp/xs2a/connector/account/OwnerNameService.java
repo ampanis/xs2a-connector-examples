@@ -16,6 +16,7 @@
 
 package de.adorsys.aspsp.xs2a.connector.account;
 
+import de.adorsys.aspsp.xs2a.connector.mock.IbanResolverMockService;
 import de.adorsys.ledgers.middleware.api.domain.account.AccountIdentifierTypeTO;
 import de.adorsys.ledgers.middleware.api.domain.account.AdditionalAccountInformationTO;
 import de.adorsys.ledgers.rest.client.AccountRestClient;
@@ -42,6 +43,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OwnerNameService {
     private final AccountRestClient accountRestClient;
+    private final IbanResolverMockService ibanResolverMockService;
 
     public boolean shouldContainOwnerName(IbanAccountReference ibanAccountReference, SpiAccountAccess accountAccess) {
         SpiAdditionalInformationAccess spiAdditionalInformationAccess = accountAccess.getSpiAdditionalInformationAccess();
@@ -69,7 +71,7 @@ public class OwnerNameService {
 
     private boolean containsAccountReferenceWithIban(List<SpiAccountReference> references, @NotNull String iban, Currency currency) {
         return references.stream()
-                       .filter(reference -> iban.equals(reference.getIban()))
+                       .filter(reference -> iban.equals(getIbanFromAccessReference(reference)))
                        .anyMatch(reference -> reference.getCurrency() == null || reference.getCurrency().equals(currency));
     }
 
@@ -84,5 +86,13 @@ public class OwnerNameService {
         return additionalAccountInformationList.stream()
                        .map(AdditionalAccountInformationTO::getAccountOwnerName)
                        .collect(Collectors.joining(", "));
+    }
+
+    private String getIbanFromAccessReference(SpiAccountReference reference) {
+        String iban = reference.getIban();
+
+        return iban != null
+                       ? iban
+                       : ibanResolverMockService.handleIbanByAccountReference(reference);
     }
 }

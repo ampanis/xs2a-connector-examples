@@ -16,6 +16,7 @@
 
 package de.adorsys.aspsp.xs2a.connector.account;
 
+import de.adorsys.aspsp.xs2a.connector.mock.IbanResolverMockService;
 import de.adorsys.aspsp.xs2a.util.JsonReader;
 import de.adorsys.ledgers.middleware.api.domain.account.AccountIdentifierTypeTO;
 import de.adorsys.ledgers.middleware.api.domain.account.AdditionalAccountInformationTO;
@@ -53,6 +54,8 @@ class OwnerNameServiceTest {
 
     @Mock
     private AccountRestClient accountRestClient;
+    @Mock
+    private IbanResolverMockService ibanResolverMockService;
     @InjectMocks
     private OwnerNameService ownerNameService;
 
@@ -100,6 +103,28 @@ class OwnerNameServiceTest {
 
     @Test
     void shouldContainOwnerName_dedicatedAccessWithOneOwnerName_noIbanValue_shouldReturnFalse() {
+        IbanAccountReference accountReference = new IbanAccountReference(IBAN_FIRST_ACCOUNT, CURRENCY_EUR);
+        SpiAccountAccess accountAccessWithCardAccounts = jsonReader.getObjectFromFile("json/account/additional-account-information/spi-account-access-dedicated-owner-name-bban-first-account.json", SpiAccountAccess.class);
+
+        boolean actualResult = ownerNameService.shouldContainOwnerName(accountReference, accountAccessWithCardAccounts);
+
+        assertFalse(actualResult);
+    }
+
+    @Test
+    void shouldContainOwnerName_dedicatedAccessWithOneOwnerName_noIbanValueInAccess_mockedIbanExists_shouldReturnTrue() {
+        IbanAccountReference accountReference = new IbanAccountReference(IBAN_FIRST_ACCOUNT, CURRENCY_EUR);
+        SpiAccountAccess accountAccessWithCardAccounts = jsonReader.getObjectFromFile("json/account/additional-account-information/spi-account-access-dedicated-owner-name-card-first-account.json", SpiAccountAccess.class);
+        SpiAccountReference cardAccountReference = jsonReader.getObjectFromFile("json/account/additional-account-information/spi-account-reference-card.json", SpiAccountReference.class);
+        when(ibanResolverMockService.handleIbanByAccountReference(cardAccountReference)).thenReturn(IBAN_FIRST_ACCOUNT);
+
+        boolean actualResult = ownerNameService.shouldContainOwnerName(accountReference, accountAccessWithCardAccounts);
+
+        assertTrue(actualResult);
+    }
+
+    @Test
+    void shouldContainOwnerName_dedicatedAccessWithOneOwnerName_noIbanValueInAccess_noMockedIban_shouldReturnFalse() {
         IbanAccountReference accountReference = new IbanAccountReference(IBAN_FIRST_ACCOUNT, CURRENCY_EUR);
         SpiAccountAccess accountAccessWithCardAccounts = jsonReader.getObjectFromFile("json/account/additional-account-information/spi-account-access-dedicated-owner-name-card-first-account.json", SpiAccountAccess.class);
 
