@@ -1,0 +1,19 @@
+{
+  "id": "11111-999999999",
+  "iban": "DE89370400440532013000",
+  "currency": "EUR",
+  "name": "Schmidt",
+  "accountType": "CASH",
+  "accountStatus": "ENABLED",
+  "bic": "GENODEF1N02",
+  "usageType": "PRIV",
+  "balances": [
+    {
+      "balanceType": "EXPECTED",
+      "amount": {
+        "currency": "EUR",
+        "amount": "1000"
+      }
+    }
+  ]
+}

@@ -16,7 +16,8 @@
 
 package de.adorsys.aspsp.xs2a.connector.spi.impl;
 
-import de.adorsys.aspsp.xs2a.connector.account.AdditionalAccountInformationService;
+import de.adorsys.aspsp.xs2a.connector.account.IbanAccountReference;
+import de.adorsys.aspsp.xs2a.connector.account.OwnerNameService;
 import de.adorsys.aspsp.xs2a.connector.mock.IbanResolverMockService;
 import de.adorsys.aspsp.xs2a.connector.spi.converter.LedgersSpiAccountMapper;
 import de.adorsys.ledgers.middleware.api.domain.account.AccountDetailsTO;
@@ -75,7 +76,7 @@ public class AccountSpiImpl implements AccountSpi {
     private final AspspConsentDataService tokenService;
     private final FeignExceptionReader feignExceptionReader;
     private final IbanResolverMockService ibanResolverMockService;
-    private final AdditionalAccountInformationService additionalAccountInformationService;
+    private final OwnerNameService ownerNameService;
 
     @Value("${test-download-transaction-list}")
     private String transactionList;
@@ -83,14 +84,14 @@ public class AccountSpiImpl implements AccountSpi {
     public AccountSpiImpl(AccountRestClient restClient, LedgersSpiAccountMapper accountMapper,
                           AuthRequestInterceptor authRequestInterceptor, AspspConsentDataService tokenService,
                           FeignExceptionReader feignExceptionReader, IbanResolverMockService ibanResolverMockService,
-                          AdditionalAccountInformationService additionalAccountInformationService) {
+                          OwnerNameService ownerNameService) {
         this.accountRestClient = restClient;
         this.accountMapper = accountMapper;
         this.authRequestInterceptor = authRequestInterceptor;
         this.tokenService = tokenService;
         this.feignExceptionReader = feignExceptionReader;
         this.ibanResolverMockService = ibanResolverMockService;
-        this.additionalAccountInformationService = additionalAccountInformationService;
+        this.ownerNameService = ownerNameService;
     }
 
     @Override
@@ -478,8 +479,9 @@ public class AccountSpiImpl implements AccountSpi {
     }
 
     private SpiAccountDetails enrichWithOwnerName(SpiAccountDetails spiAccountDetails, SpiAccountAccess accountAccess) {
-        if (additionalAccountInformationService.shouldContainOwnerName(spiAccountDetails, accountAccess)) {
-            return additionalAccountInformationService.enrichAccountDetailsWithOwnerName(spiAccountDetails);
+        IbanAccountReference ibanAccountReference = new IbanAccountReference(spiAccountDetails.getIban(), spiAccountDetails.getCurrency());
+        if (ownerNameService.shouldContainOwnerName(ibanAccountReference, accountAccess)) {
+            return ownerNameService.enrichAccountDetailsWithOwnerName(spiAccountDetails);
         }
 
         return spiAccountDetails;

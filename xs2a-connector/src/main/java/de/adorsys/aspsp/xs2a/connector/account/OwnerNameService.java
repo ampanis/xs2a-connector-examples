@@ -16,7 +16,6 @@
 
 package de.adorsys.aspsp.xs2a.connector.account;
 
-import de.adorsys.aspsp.xs2a.connector.mock.IbanResolverMockService;
 import de.adorsys.ledgers.middleware.api.domain.account.AccountIdentifierTypeTO;
 import de.adorsys.ledgers.middleware.api.domain.account.AdditionalAccountInformationTO;
 import de.adorsys.ledgers.rest.client.AccountRestClient;
@@ -24,31 +23,31 @@ import de.adorsys.psd2.xs2a.core.ais.AccountAccessType;
 import de.adorsys.psd2.xs2a.spi.domain.account.SpiAccountDetails;
 import de.adorsys.psd2.xs2a.spi.domain.account.SpiAccountReference;
 import de.adorsys.psd2.xs2a.spi.domain.account.SpiAdditionalInformationAccess;
+import de.adorsys.psd2.xs2a.spi.domain.account.SpiCardAccountDetails;
 import de.adorsys.psd2.xs2a.spi.domain.consent.SpiAccountAccess;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
 import java.util.Currency;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AdditionalAccountInformationService {
-    private final IbanResolverMockService ibanResolverMockService;
+public class OwnerNameService {
     private final AccountRestClient accountRestClient;
 
-    public boolean shouldContainOwnerName(SpiAccountDetails accountDetails, SpiAccountAccess accountAccess) {
+    public boolean shouldContainOwnerName(IbanAccountReference ibanAccountReference, SpiAccountAccess accountAccess) {
         SpiAdditionalInformationAccess spiAdditionalInformationAccess = accountAccess.getSpiAdditionalInformationAccess();
         if (spiAdditionalInformationAccess != null && spiAdditionalInformationAccess.getOwnerName() != null) {
             List<SpiAccountReference> ownerName = spiAdditionalInformationAccess.getOwnerName();
-            return ownerName.isEmpty() || containsAccountReferenceWithIban(ownerName, accountDetails.getIban(), accountDetails.getCurrency());
+            return ownerName.isEmpty() || containsAccountReferenceWithIban(ownerName, ibanAccountReference.getIban(), ibanAccountReference.getCurrency());
         }
 
         AccountAccessType allAccountsWithOwnerName = AccountAccessType.ALL_ACCOUNTS_WITH_OWNER_NAME;
@@ -57,21 +56,25 @@ public class AdditionalAccountInformationService {
     }
 
     public SpiAccountDetails enrichAccountDetailsWithOwnerName(SpiAccountDetails accountDetails) {
-        String accountOwnerNameFromLedgers = getAccountOwnerNameFromLedgers(accountDetails);
+        String accountOwnerNameFromLedgers = getAccountOwnerNameFromLedgers(accountDetails.getResourceId());
         accountDetails.setOwnerName(accountOwnerNameFromLedgers);
         return accountDetails;
     }
 
-    private boolean containsAccountReferenceWithIban(List<SpiAccountReference> references, String iban, Currency currency) {
+    public SpiCardAccountDetails enrichCardAccountDetailsWithOwnerName(SpiCardAccountDetails cardAccountDetails) {
+        String accountOwnerNameFromLedgers = getAccountOwnerNameFromLedgers(cardAccountDetails.getResourceId());
+        cardAccountDetails.setOwnerName(accountOwnerNameFromLedgers);
+        return cardAccountDetails;
+    }
+
+    private boolean containsAccountReferenceWithIban(List<SpiAccountReference> references, @NotNull String iban, Currency currency) {
         return references.stream()
-                       .filter(reference -> Optional.ofNullable(reference.getIban())
-                                                    .orElseGet(() -> ibanResolverMockService.handleIbanByAccountReference(reference)) // TODO: Remove when ledgers starts supporting card accounts https://git.adorsys.de/adorsys/xs2a/aspsp-xs2a/issues/1246
-                                                    .equals(iban))
+                       .filter(reference -> iban.equals(reference.getIban()))
                        .anyMatch(reference -> reference.getCurrency() == null || reference.getCurrency().equals(currency));
     }
 
-    private String getAccountOwnerNameFromLedgers(SpiAccountDetails accountDetails) {
-        ResponseEntity<List<AdditionalAccountInformationTO>> additionalAccountInfo = accountRestClient.getAdditionalAccountInfo(AccountIdentifierTypeTO.ACCOUNT_ID, accountDetails.getResourceId());
+    private String getAccountOwnerNameFromLedgers(String resourceId) {
+        ResponseEntity<List<AdditionalAccountInformationTO>> additionalAccountInfo = accountRestClient.getAdditionalAccountInfo(AccountIdentifierTypeTO.ACCOUNT_ID, resourceId);
 
         List<AdditionalAccountInformationTO> additionalAccountInformationList = additionalAccountInfo.getBody();
         if (CollectionUtils.isEmpty(additionalAccountInformationList)) {

@@ -1,12 +1,12 @@
 package de.adorsys.aspsp.xs2a.connector.spi.impl;
 
-import de.adorsys.aspsp.xs2a.connector.account.AdditionalAccountInformationService;
+import de.adorsys.aspsp.xs2a.connector.account.IbanAccountReference;
+import de.adorsys.aspsp.xs2a.connector.account.OwnerNameService;
 import de.adorsys.aspsp.xs2a.connector.spi.converter.LedgersSpiAccountMapper;
 import de.adorsys.aspsp.xs2a.connector.spi.converter.LedgersSpiAccountMapperImpl;
 import de.adorsys.aspsp.xs2a.util.JsonReader;
 import de.adorsys.aspsp.xs2a.util.TestSpiDataProvider;
 import de.adorsys.ledgers.middleware.api.domain.account.AccountDetailsTO;
-import de.adorsys.ledgers.middleware.api.domain.account.AdditionalAccountInformationTO;
 import de.adorsys.ledgers.middleware.api.domain.account.TransactionTO;
 import de.adorsys.ledgers.middleware.api.domain.sca.SCAConsentResponseTO;
 import de.adorsys.ledgers.middleware.api.domain.sca.SCAResponseTO;
@@ -24,7 +24,6 @@ import de.adorsys.psd2.xs2a.spi.domain.response.SpiResponse;
 import feign.FeignException;
 import feign.Request;
 import feign.Response;
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -66,6 +65,7 @@ class AccountSpiImplTest {
     private static final String ACCOUNT_OWNER_NAME_SECOND_ACCOUNT = "account owner name 2";
     private static final String IBAN = "DE89370400440532013000";
     private static final String IBAN_SECOND_ACCOUNT = "DE32760700240271232100";
+    private static final Currency CURRENCY_EUR = Currency.getInstance("EUR");
 
     @InjectMocks
     private AccountSpiImpl accountSpi;
@@ -85,7 +85,7 @@ class AccountSpiImplTest {
     @Mock
     private FeignExceptionReader feignExceptionReader;
     @Mock
-    private AdditionalAccountInformationService additionalAccountInformationService;
+    private OwnerNameService ownerNameService;
 
     private JsonReader jsonReader = new JsonReader();
     private SpiAccountConsent spiAccountConsent;
@@ -339,12 +339,12 @@ class AccountSpiImplTest {
         when(accountRestClient.getListOfAccounts()).thenReturn(ResponseEntity.ok(accountDetailsTOList));
 
         SpiAccountDetails spiAccountDetailsFirstAccount = buildSpiAccountDetails(IBAN, RESOURCE_ID);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsFirstAccount, accountAccess)).thenReturn(true);
-        when(additionalAccountInformationService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN, CURRENCY_EUR), accountAccess)).thenReturn(true);
+        when(ownerNameService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
                 .thenReturn(buildSpiAccountDetailsWithOwnerName(IBAN, RESOURCE_ID, ACCOUNT_OWNER_NAME));
         SpiAccountDetails spiAccountDetailsSecondAccount = buildSpiAccountDetails(IBAN_SECOND_ACCOUNT, RESOURCE_ID_SECOND_ACCOUNT);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsSecondAccount, accountAccess)).thenReturn(true);
-        when(additionalAccountInformationService.enrichAccountDetailsWithOwnerName(spiAccountDetailsSecondAccount))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN_SECOND_ACCOUNT, CURRENCY_EUR), accountAccess)).thenReturn(true);
+        when(ownerNameService.enrichAccountDetailsWithOwnerName(spiAccountDetailsSecondAccount))
                 .thenReturn(buildSpiAccountDetailsWithOwnerName(IBAN_SECOND_ACCOUNT, RESOURCE_ID_SECOND_ACCOUNT, ACCOUNT_OWNER_NAME_SECOND_ACCOUNT));
 
         //When
@@ -372,11 +372,9 @@ class AccountSpiImplTest {
                                                               .collect(Collectors.toList());
         when(accountRestClient.getListOfAccounts()).thenReturn(ResponseEntity.ok(accountDetailsTOList));
 
-        SpiAccountDetails spiAccountDetailsFirstAccount = buildSpiAccountDetails(IBAN, RESOURCE_ID);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsFirstAccount, accountAccess))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN, CURRENCY_EUR), accountAccess))
                 .thenReturn(false);
-        SpiAccountDetails spiAccountDetailsSecondAccount = buildSpiAccountDetails(IBAN_SECOND_ACCOUNT, RESOURCE_ID_SECOND_ACCOUNT);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsSecondAccount, accountAccess))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN_SECOND_ACCOUNT, CURRENCY_EUR), accountAccess))
                 .thenReturn(false);
 
         //When
@@ -388,7 +386,7 @@ class AccountSpiImplTest {
         assertNotNull(spiAccountDetails);
         assertNull(spiAccountDetails.get(0).getOwnerName());
         assertNull(spiAccountDetails.get(1).getOwnerName());
-        verify(additionalAccountInformationService, never()).enrichAccountDetailsWithOwnerName(any());
+        verify(ownerNameService, never()).enrichAccountDetailsWithOwnerName(any());
     }
 
     @Test
@@ -407,12 +405,12 @@ class AccountSpiImplTest {
         when(accountRestClient.getListOfAccounts()).thenReturn(ResponseEntity.ok(accountDetailsTOList));
 
         SpiAccountDetails spiAccountDetailsFirstAccount = buildSpiAccountDetails(IBAN, RESOURCE_ID);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsFirstAccount, accountAccess))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN, CURRENCY_EUR), accountAccess))
                 .thenReturn(true);
-        when(additionalAccountInformationService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
+        when(ownerNameService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
                 .thenReturn(buildSpiAccountDetailsWithOwnerName(IBAN, RESOURCE_ID, ACCOUNT_OWNER_NAME));
         SpiAccountDetails spiAccountDetailsSecondAccount = buildSpiAccountDetails(IBAN_SECOND_ACCOUNT, RESOURCE_ID_SECOND_ACCOUNT);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsSecondAccount, accountAccess))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN_SECOND_ACCOUNT, CURRENCY_EUR), accountAccess))
                 .thenReturn(false);
 
         //When
@@ -424,7 +422,7 @@ class AccountSpiImplTest {
         assertNotNull(spiAccountDetails);
         assertNotNull(spiAccountDetails.get(0).getOwnerName());
         assertNull(spiAccountDetails.get(1).getOwnerName());
-        verify(additionalAccountInformationService, never()).enrichAccountDetailsWithOwnerName(spiAccountDetailsSecondAccount);
+        verify(ownerNameService, never()).enrichAccountDetailsWithOwnerName(spiAccountDetailsSecondAccount);
     }
 
     @Test
@@ -435,9 +433,9 @@ class AccountSpiImplTest {
         SpiAccountAccess accountAccess = spiAccountConsent.getAccess();
 
         SpiAccountDetails spiAccountDetailsFirstAccount = buildSpiAccountDetails(IBAN, RESOURCE_ID);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsFirstAccount, accountAccess))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN, CURRENCY_EUR), accountAccess))
                 .thenReturn(true);
-        when(additionalAccountInformationService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
+        when(ownerNameService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
                 .thenReturn(buildSpiAccountDetailsWithOwnerName(IBAN, RESOURCE_ID, ACCOUNT_OWNER_NAME));
 
         //When
@@ -458,9 +456,9 @@ class AccountSpiImplTest {
         SpiAccountAccess accountAccess = spiAccountConsent.getAccess();
 
         SpiAccountDetails spiAccountDetailsFirstAccount = buildSpiAccountDetails(IBAN, RESOURCE_ID);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsFirstAccount, accountAccess))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN, CURRENCY_EUR), accountAccess))
                 .thenReturn(true);
-        when(additionalAccountInformationService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
+        when(ownerNameService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
                 .thenReturn(buildSpiAccountDetailsWithOwnerName(IBAN, RESOURCE_ID, ACCOUNT_OWNER_NAME));
 
         //When
@@ -481,9 +479,9 @@ class AccountSpiImplTest {
         SpiAccountAccess accountAccess = spiAccountConsent.getAccess();
 
         SpiAccountDetails spiAccountDetailsFirstAccount = buildSpiAccountDetails(IBAN, RESOURCE_ID);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsFirstAccount, accountAccess))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN, CURRENCY_EUR), accountAccess))
                 .thenReturn(true);
-        when(additionalAccountInformationService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
+        when(ownerNameService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
                 .thenReturn(buildSpiAccountDetailsWithOwnerName(IBAN, RESOURCE_ID, ACCOUNT_OWNER_NAME));
 
         //When
@@ -504,9 +502,9 @@ class AccountSpiImplTest {
         accountAccess.setSpiAdditionalInformationAccess(new SpiAdditionalInformationAccess(Collections.emptyList()));
         when(accountRestClient.getAccountDetailsById(RESOURCE_ID)).thenReturn(ResponseEntity.ok(buildAccountDetailsTO(IBAN, RESOURCE_ID)));
         SpiAccountDetails spiAccountDetailsFirstAccount = buildSpiAccountDetails(IBAN, RESOURCE_ID);
-        when(additionalAccountInformationService.shouldContainOwnerName(spiAccountDetailsFirstAccount, accountAccess))
+        when(ownerNameService.shouldContainOwnerName(new IbanAccountReference(IBAN, CURRENCY_EUR), accountAccess))
                 .thenReturn(true);
-        when(additionalAccountInformationService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
+        when(ownerNameService.enrichAccountDetailsWithOwnerName(spiAccountDetailsFirstAccount))
                 .thenReturn(buildSpiAccountDetailsWithOwnerName(IBAN, RESOURCE_ID, ACCOUNT_OWNER_NAME));
 
         //when
@@ -537,7 +535,7 @@ class AccountSpiImplTest {
         SpiAccountDetails spiAccountDetails = actualResponse.getPayload();
         assertNotNull(spiAccountDetails);
         assertNull(spiAccountDetails.getOwnerName());
-        verify(additionalAccountInformationService, never()).enrichAccountDetailsWithOwnerName(any());
+        verify(ownerNameService, never()).enrichAccountDetailsWithOwnerName(any());
     }
 
     private void verifyGetListOfAccounts() {
@@ -730,12 +728,5 @@ class AccountSpiImplTest {
 
     private SpiAccountConsent buildSpiAccountConsent() {
         return jsonReader.getObjectFromFile("json/spi/impl/spi-account-consent-with-2-accounts.json", SpiAccountConsent.class);
-    }
-
-    @NotNull
-    private AdditionalAccountInformationTO buildAdditionalAccountInformationTO(String ownerName) {
-        AdditionalAccountInformationTO additionalAccountInformationTO = new AdditionalAccountInformationTO();
-        additionalAccountInformationTO.setAccountOwnerName(ownerName);
-        return additionalAccountInformationTO;
     }
 }

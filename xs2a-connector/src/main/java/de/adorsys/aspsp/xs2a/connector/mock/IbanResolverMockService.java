@@ -61,6 +61,10 @@ public class IbanResolverMockService {
                        .orElse(ibanMap.get(accountReference.getPan()));
     }
 
+    public Optional<String> getIbanByMaskedPan(String maskedPan) {
+        return Optional.ofNullable(ibanMap.get(maskedPan));
+    }
+
     public String getMaskedPanByIban(String iban) {
 
         // Find all keys by the definite value.
