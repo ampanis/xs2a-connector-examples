@@ -516,7 +516,7 @@ class CardAccountSpiImplTest {
         verify(accountRestClient, times(1)).getListOfAccounts();
         verify(tokenService, times(2)).response(ASPSP_CONSENT_DATA.getAspspConsentData());
         verify(authRequestInterceptor, times(2)).setAccessToken("access_token");
-        verify(authRequestInterceptor, times(2)).setAccessToken(null);
+        verify(authRequestInterceptor).setAccessToken(null);
     }
 
     private FeignException getFeignException() {
